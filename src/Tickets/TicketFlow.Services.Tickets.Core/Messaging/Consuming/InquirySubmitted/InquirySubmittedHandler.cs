@@ -1,12 +1,17 @@
+using System.Text.Json;
 using TicketFlow.CourseUtils;
 using TicketFlow.Services.Tickets.Core.Data.Models;
 using TicketFlow.Services.Tickets.Core.Data.Repositories;
+using TicketFlow.Shared.Exceptions;
 using TicketFlow.Shared.Messaging;
+using TicketFlow.Shared.Serialization;
 
 namespace TicketFlow.Services.Tickets.Core.Messaging.Consuming.InquirySubmitted;
 
 public sealed class InquirySubmittedHandler(ITicketsRepository repository, IMessagePublisher messagePublisher) : IMessageHandler<InquirySubmitted>
 {
+    private static HttpClient _httpClient = new();
+    
     public async Task HandleAsync(InquirySubmitted message, CancellationToken cancellationToken = default)
     {
         if (!FeatureFlags.UseListenToYourselfExample)
@@ -21,7 +26,14 @@ public sealed class InquirySubmittedHandler(ITicketsRepository repository, IMess
 
     private async Task HandleDefault(InquirySubmitted message, CancellationToken cancellationToken)
     {
-        var (id, name, email, title, description, category, languageCode, _) = message;
+        var inquiry = await GetInquiryDetailsAsync(message.Id, cancellationToken);
+
+        if (inquiry == null)
+        {
+            throw new TicketFlowException("Inquiry not found");
+        }
+        
+        var (id, name, title, email, description, category, _, _, _) = inquiry;
 
         if (await repository.ExistsAsync(id, cancellationToken))
         {
@@ -34,7 +46,7 @@ public sealed class InquirySubmittedHandler(ITicketsRepository repository, IMess
             categoryParsed = TicketCategory.Other;
         }
         
-        var ticket = new Ticket(id, name, email, title, description, categoryParsed, languageCode);
+        var ticket = new Ticket(id, name, email, title, description, categoryParsed, "unknown");
         
         var scheduledAction = await repository.GetScheduledAction(message.Id, cancellationToken);
 
@@ -64,7 +76,14 @@ public sealed class InquirySubmittedHandler(ITicketsRepository repository, IMess
     
     private async Task HandleWithListenToYourself(InquirySubmitted message, CancellationToken cancellationToken)
     {
-        var (id, name, email, title, description, category, languageCode, _) = message;
+        var inquiry = await GetInquiryDetailsAsync(message.Id, cancellationToken);
+
+        if (inquiry == null)
+        {
+            throw new TicketFlowException("Inquiry not found");
+        }
+        
+        var (id, name, title, email, description, category, _, _, _) = inquiry;
 
         if (await repository.ExistsAsync(id, cancellationToken))
         {
@@ -77,7 +96,7 @@ public sealed class InquirySubmittedHandler(ITicketsRepository repository, IMess
             categoryParsed = TicketCategory.Other;
         }
         
-        var ticket = new Ticket(Guid.NewGuid(), name, email, title, description, categoryParsed, languageCode);
+        var ticket = new Ticket(Guid.NewGuid(), name, email, title, description, categoryParsed, "unknown");
         
         var scheduledAction = await repository.GetScheduledAction(message.Id, cancellationToken);
 
@@ -102,4 +121,30 @@ public sealed class InquirySubmittedHandler(ITicketsRepository repository, IMess
         
         await messagePublisher.PublishAsync(ticketCreatedMessage, cancellationToken: cancellationToken);
     }
+
+    private async Task<InquiryDto> GetInquiryDetailsAsync(Guid inquiryId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var json = await _httpClient.GetStringAsync($"http://localhost:5011/inquiries/{inquiryId.ToString()}", cancellationToken);
+            var result = JsonSerializer.Deserialize<InquiryDto>(json, SerializationOptions.Default);
+            return result!;
+        }
+        catch (HttpRequestException ex)
+        {
+            Console.WriteLine(ex.Message);
+            return null!;
+        }
+    }
+    
+    public record InquiryDto(
+        Guid Id,
+        string Name,
+        string Title,
+        string Email,
+        string Description,
+        string Category,
+        string Status,
+        string CreatedAt,
+        string? TicketId);
 }

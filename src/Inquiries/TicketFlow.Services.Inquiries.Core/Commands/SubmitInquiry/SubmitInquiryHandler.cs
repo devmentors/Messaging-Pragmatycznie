@@ -1,4 +1,3 @@
-using MassTransit;
 using Microsoft.Extensions.Logging;
 using TicketFlow.Services.Inquiries.Core.Data.Models;
 using TicketFlow.Services.Inquiries.Core.Data.Repositories;
@@ -10,7 +9,7 @@ using TicketFlow.Shared.Messaging;
 namespace TicketFlow.Services.Inquiries.Core.Commands.SubmitInquiry;
 
 internal sealed class SubmitInquiryHandler(IInquiriesRepository repository, ILanguageDetector languageDetector, 
-    IMessagePublisher messagePublisher, ILogger<SubmitInquiryHandler> logger, IBus massTransitBus) : ICommandHandler<SubmitInquiry>
+    IMessagePublisher messagePublisher, ILogger<SubmitInquiryHandler> logger) : ICommandHandler<SubmitInquiry>
 {
     private const string EnglishLanguageCode = "en";
     public async Task HandleAsync(SubmitInquiry command, CancellationToken cancellationToken = default)
@@ -22,15 +21,7 @@ internal sealed class SubmitInquiryHandler(IInquiriesRepository repository, ILan
         await repository.AddAsync(inquiry, cancellationToken);
         var languageCode = await languageDetector.GetTextLanguageCode(inquiry.Description, cancellationToken);
 
-        var inquiryReportedMessage = new InquirySubmitted(
-            inquiry.Id,
-            inquiry.Name,
-            inquiry.Email,
-            inquiry.Title,
-            inquiry.Description,
-            inquiry.Category.ToString(),
-            languageCode,
-            inquiry.CreatedAt);
+        var inquiryReportedMessage = new InquirySubmitted(inquiry.Id);
         await messagePublisher.PublishAsync(inquiryReportedMessage, cancellationToken: cancellationToken);
         
         logger.LogInformation($"Inquiry with id: {inquiry.Id} submitted successfully.");
@@ -40,8 +31,6 @@ internal sealed class SubmitInquiryHandler(IInquiriesRepository repository, ILan
             var requestTranslationV1 = new RequestTranslationV1(inquiry.Description, inquiry.Id);
             
             await messagePublisher.PublishAsync(requestTranslationV1, destination: "", routingKey: "request-translation-v1-queue", cancellationToken: cancellationToken);
-            var sendEndpoint = await massTransitBus.GetSendEndpoint(new Uri("queue:request-translation-v1-queue"));
-            await sendEndpoint.Send(requestTranslationV1, cancellationToken: cancellationToken);
             
             logger.LogInformation($"Translation for inquiry with id: {inquiry.Id} has been requested.");
         }

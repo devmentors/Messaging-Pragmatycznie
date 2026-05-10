@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using TicketFlow.CourseUtils;
 using TicketFlow.Services.Inquiries.Core;
 using TicketFlow.Services.Inquiries.Core.Commands.SubmitInquiry;
 using TicketFlow.Services.Inquiries.Core.Commands.SubmitInquirySynchronously;
+using TicketFlow.Services.Inquiries.Core.Data;
 using TicketFlow.Services.Inquiries.Core.Queries;
 using TicketFlow.Shared.AnomalyGeneration.HttpApi;
 using TicketFlow.Shared.AspNetCore;
@@ -52,6 +54,26 @@ app.MapPost("/inquiries/submit-sync", async ([FromBody] SubmitInquirySynchronous
 {
     await handler.HandleAsync(command, cancellationToken);
     return Results.Ok();
+});
+
+app.MapGet("/inquiries/{inquiryId}", async ([FromRoute] Guid inquiryId, [FromServices] InquiriesDbContext dbContext, CancellationToken cancellationToken) =>
+{
+    var x = await dbContext.Inquiries.Where(x => x.Id == inquiryId).SingleOrDefaultAsync(cancellationToken);
+    if (x == null)
+    {
+        return Results.NotFound();
+    }
+    
+    return Results.Ok(new InquiriesListEntryDto(
+        x.Id.ToString(),
+        x.Name,
+        x.Title,
+        x.Email,
+        x.Description,
+        x.Category,
+        x.Status,
+        x.CreatedAt.ToString("O"),
+        x.TicketId?.ToString()));
 });
 
 app.Run();
