@@ -82,3 +82,6 @@ Doszliśmy do wniosku, że skoro budujemy UI do TicketFlow, to powinniśmy takż
 🧪 Tak też powstał system generowanie anomalii w TicketFlow, o którym [**przeczytasz** **tutaj**](./docs/ANOMALIE.md)!
 
 ![anomalie](./docs/images/anomalie.png)
+
+## Wsparcie
+<a href="https://devmentors.circle.so"><img width="1620" height="260" alt="circle_support" src="https://github.com/user-attachments/assets/4f4bce99-e0c5-42e3-9867-f378b61b8826" /></a>
